@@ -29,11 +29,11 @@ class NoProxy implements GoogleProxyInterface
     public function parseUrl(string $url): string
     {
         // Separates the url parts
-        $link = parse_url($url);
+        $urlParts = parse_url($url);
         // Parses the parameters of the url query
-        parse_str($link['query'], $link);
+        parse_str($urlParts['query'], $urlParts);
 
-        $url = filter_var($link['q'], FILTER_VALIDATE_URL);
+        $url = filter_var($urlParts['q'], FILTER_VALIDATE_URL);
         // If this is not a valid URL, so the result is (probably) an image, news or video suggestion
         if (!$url) {
             throw new InvalidResultException();

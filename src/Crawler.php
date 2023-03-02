@@ -1,10 +1,12 @@
 <?php
+
 namespace CViniciusSDias\GoogleCrawler;
 
 use CViniciusSDias\GoogleCrawler\Exception\InvalidGoogleHtmlException;
 use CViniciusSDias\GoogleCrawler\Exception\InvalidResultException;
 use CViniciusSDias\GoogleCrawler\Proxy\{
-    GoogleProxyInterface, NoProxy
+    GoogleProxyInterface,
+    NoProxy
 };
 use Symfony\Component\DomCrawler\Crawler as DomCrawler;
 use Symfony\Component\DomCrawler\Link;
@@ -19,29 +21,12 @@ use DOMElement;
 class Crawler
 {
     /** @var GoogleProxyInterface $proxy */
-    protected $proxy;
-    /** @var SearchTermInterface $searchTerm */
-    private $searchTerm;
-    /** @var string $countrySpecificSuffix */
-    private $googleDomain;
-    /** @var string $countryCode */
-    private $countryCode;
+    protected GoogleProxyInterface $proxy;
 
     public function __construct(
-        SearchTermInterface $searchTerm,
-        GoogleProxyInterface $proxy = null,
-        string $googleDomain = 'google.com',
-        string $countryCode = ''
+        GoogleProxyInterface $proxy = null
     ) {
-        $this->proxy = is_null($proxy) ? new NoProxy() : $proxy;
-        $this->searchTerm = $searchTerm;
-
-        if (stripos($googleDomain, 'google.') === false || stripos($googleDomain, 'http') === 0) {
-            throw new \InvalidArgumentException('Invalid google domain');
-        }
-        $this->googleDomain = $googleDomain;
-
-        $this->countryCode = strtoupper($countryCode);
+        $this->proxy = $proxy ?? new NoProxy();
     }
 
     /**
@@ -51,16 +36,22 @@ class Crawler
      * @throws \GuzzleHttp\Exception\ServerException If the proxy was overused
      * @throws \GuzzleHttp\Exception\ConnectException If the proxy is unavailable or $countrySpecificSuffix is invalid
      */
-    public function getResults(): ResultList
+    public function getResults(SearchTermInterface $searchTerm, string $googleDomain = "google.com", string $countryCode = ""): ResultList
     {
-        $googleUrl = $this->getGoogleUrl();
+        if (stripos($googleDomain, 'google.') === false || stripos($googleDomain, 'http') === 0) {
+            throw new \InvalidArgumentException('Invalid google domain');
+        }
+
+        $googleUrl = "https://$googleDomain/search?q={$searchTerm}&num=100";
+        if (!empty($countryCode)) {
+            $googleUrl .= "&gl={$countryCode}";
+        }
+        
         $response = $this->proxy->getHttpResponse($googleUrl);
         $stringResponse = (string) $response->getBody();
+
         $domCrawler = new DomCrawler($stringResponse);
-        $googleResultList = $domCrawler->filterXPath('//div[@class="ZINbbc xpd O9g5cc uUPGi"]');
-        if ($googleResultList->count() === 0) {
-            throw new InvalidGoogleHtmlException('No parseable element found');
-        }
+        $googleResultList = $this->createGoogleResultList($domCrawler);
 
         $resultList = new ResultList($googleResultList->count());
 
@@ -78,6 +69,15 @@ class Crawler
         }
 
         return $resultList;
+    }
+
+    private function createGoogleResultList(DomCrawler $domCrawler): DomCrawler
+    {
+        $googleResultList = $domCrawler->filterXPath('//div[@class="Gx5Zad fP1Qef xpd EtOod pkphOe"]');
+        if ($googleResultList->count() === 0) {
+            throw new InvalidGoogleHtmlException('No parsable element found');
+        }
+        return $googleResultList;
     }
 
     /**
@@ -114,29 +114,6 @@ class Crawler
         return $this->proxy->parseUrl($url);
     }
 
-    /**
-     * Assembles the Google URL using the previously informed data
-     */
-    private function getGoogleUrl(): string
-    {
-        $domain = $this->googleDomain;
-        $url = "https://$domain/search?q={$this->searchTerm}&num=100";
-        if (!empty($this->countryCode)) {
-            $url .= "&gl={$this->countryCode}";
-        }
-
-        return $url;
-    }
-
-    private function isImageSuggestion(DomCrawler $resultCrawler)
-    {
-        $resultCount = $resultCrawler
-            ->filterXpath('//img')
-            ->count();
-
-        return $resultCount > 0;
-    }
-
     private function parseDomElement(DOMElement $result): Result
     {
         $resultCrawler = new DomCrawler($result);
@@ -152,7 +129,8 @@ class Crawler
             throw new InvalidResultException('Description element not found');
         }
 
-        if ($this->isImageSuggestion($resultCrawler)) {
+        $isImageSuggestion = $resultCrawler->filterXpath('//img')->count() > 0;
+        if ($isImageSuggestion) {
             throw new InvalidResultException('Result is an image suggestion');
         }
 
@@ -160,7 +138,6 @@ class Crawler
             throw new InvalidResultException('Result is a google suggestion');
         }
 
-        $googleResult = $this->createResult($resultLink, $descriptionElement);
-        return $googleResult;
+        return $this->createResult($resultLink, $descriptionElement);
     }
 }
