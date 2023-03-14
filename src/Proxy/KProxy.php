@@ -61,9 +61,9 @@ class KProxy implements GoogleProxyInterface
     }
 
     /** {@inheritdoc} */
-    public function parseUrl(string $url): string
+    public function parseUrl(string $googleUrl): string
     {
-        $parsedUrl = parse_url($url);
+        $parsedUrl = parse_url($googleUrl);
         parse_str($parsedUrl['query'], $link);
 
         if (!array_key_exists('q', $link)) {

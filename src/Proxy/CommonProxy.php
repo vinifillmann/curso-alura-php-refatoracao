@@ -43,9 +43,9 @@ class CommonProxy implements GoogleProxyInterface
     }
 
     /** {@inheritdoc} */
-    public function parseUrl(string $url): string
+    public function parseUrl(string $googleUrl): string
     {
-        $link = parse_url($url);
+        $link = parse_url($googleUrl);
         parse_str($link['query'], $link);
 
         parse_str($link['u'], $link);
