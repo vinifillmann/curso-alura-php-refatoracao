@@ -3,16 +3,13 @@
 namespace CViniciusSDias\GoogleCrawler;
 
 use CViniciusSDias\GoogleCrawler\Exception\InvalidGoogleHtmlException;
-use CViniciusSDias\GoogleCrawler\Exception\InvalidResultException;
 use CViniciusSDias\GoogleCrawler\Proxy\{
-    GoogleProxyInterface,
-    NoProxy
+    GoogleProxyAbstractFactory,
+    NoProxyAbstractFactory
 };
 use CViniciusSDias\GoogleCrawler\Proxy\HttpClient\GoogleHttpClientInterface;
 use CViniciusSDias\GoogleCrawler\Proxy\UrlParser\GoogleUrlParserInterface;
 use Symfony\Component\DomCrawler\Crawler as DomCrawler;
-use Symfony\Component\DomCrawler\Link;
-use DOMElement;
 
 /**
  * Google Crawler
@@ -23,10 +20,18 @@ use DOMElement;
 class Crawler
 {
 
+    private GoogleHttpClientInterface $httpClient;
+    private GoogleUrlParserInterface $urlParser;
     public function __construct(
-        private GoogleUrlParserInterface $parser,
-        private GoogleHttpClientInterface $httpClient
-    ) {}
+        GoogleProxyAbstractFactory $factory = null
+    ) {
+        if (is_null($factory)) {
+            $factory = new NoProxyAbstractFactory();
+        }
+
+        $this->httpClient = $factory->createGoogleHttpClient();
+        $this->urlParser = $factory->createGoogleUrlParser();
+    }
 
     /**
      * Returns the 100 first found results for the specified search term
@@ -54,7 +59,7 @@ class Crawler
 
         $resultList = new ResultList($googleResultList->count());
 
-        $domElementParser = new DomElementParser($this->parser);
+        $domElementParser = new DomElementParser($this->urlParser);
         foreach ($googleResultList as $googleResultElement) {
             $parsedResultMaybe = $domElementParser->parse($googleResultElement);
             $parsedResultMaybe->select(fn (Result $parsedResult) => $resultList->addResult($parsedResult));
